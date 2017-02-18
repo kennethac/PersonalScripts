@@ -1,0 +1,82 @@
+#!/bin/bash
+
+#A POSIX variable
+OPTIND=1 # Reset in case getopts has been used previously in the shell
+
+show_help(){
+	echo "Usage: proxy [on|off]"
+#	echo "Usage: proxy [-h|-?] [-i <interface name>] [-s on|off] [-p <socks_port>] [-a <remote_ip>] [-u <remote_user]"
+	echo "Usage: [optons]"
+	echo "Version 1.0"
+	echo "Turns on/off the SOCKS ssh proxy"
+	
+	# FIXME: Don't release it to anyone like this...
+	echo "If no port/host/user information is provided, it uses a \$HOMEIP equivilant."
+	echo "If no state information is provided, assume 'on'"
+}
+
+
+
+# Initialize my own variables
+interface="Wi-Fi"
+state="on"
+port=8181
+host=$(curl -s my-dns.herokuapp.com | xargs)
+user=""
+
+while getopts "h?i:s:p:a:u:" opt; do
+	case "$opt" in
+	h|\?)
+		show_help
+		exit 0
+		;;
+	i) interface="$OPTARG"
+		;;
+	s) state="$OPTARG"
+		;;
+	p) port="$OPTARG"
+		;;
+	a) host="$OPTARG"
+		;;
+	u) user="$OPTARG"
+		;;
+	esac
+done
+
+arg1=("$@")
+if [[ $arg1 = "on" ]]; then
+	state=$arg1
+fi
+
+if [[ $arg1 = "off" ]]; then
+	state=$arg1
+fi
+
+
+if [ "$state" != "on" ] && [ "$state" != "off" ] ; then
+	echo "You must set state to either \"on\" or \"off\"."
+	exit 1
+fi
+
+echo $state
+
+if [ "$state" = "on" ]; then
+        read -p "Enter SSH username: " user
+	read -s -p "Enter SSH password: " password
+	echo ""
+	/usr/bin/expect -c "spawn -ignore HUP ssh -l $user -ND $port $host; expect \"Password:\"; send \"$password\n\""
+	#SSH_ID=$!
+	#echo $SSH_ID >> /tmp/proxySSH_ID
+	echo "----"
+	echo "Sudo password may be required: "
+	sudo networksetup -setsocksfirewallproxy "$interface" localhost $port > /tmp/setstate.txt
+	sudo networksetup -setsocksfirewallproxystate "$interface" "$state"
+	exit $?
+fi
+
+if [ "$state" = "off" ]; then
+	ps -ef | grep "ssh" | grep "ND" | grep -v grep | awk '{print $2}' | xargs kill
+	sudo networksetup -setsocksfirewallproxystate "$interface" "$state"
+fi
+
+
